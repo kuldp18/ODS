@@ -1,13 +1,21 @@
 package org.ods.scanner
 
-import android.graphics.*
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import androidx.exifinterface.media.ExifInterface
 import org.opencv.android.OpenCVLoader
 import org.opencv.android.Utils
-import org.opencv.core.*
+import org.opencv.core.Core
+import org.opencv.core.Mat
+import org.opencv.core.MatOfPoint2f
+import org.opencv.core.Point
+import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import java.io.File
-import kotlin.math.*
+import kotlin.math.hypot
+import kotlin.math.max
+import kotlin.math.roundToInt
 
 object ImageProcessor {
     private val lock = Any()
