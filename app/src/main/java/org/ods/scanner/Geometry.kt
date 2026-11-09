@@ -6,6 +6,18 @@ data class Corner(val x: Float, val y: Float)
 
 /** Clockwise TL, TR, BR, BL in the EXIF-oriented original, independent of preview size. */
 data class Crop(val points: List<Corner>) {
+    /** Four corners plus four edge handles. Edge handles translate both endpoints. */
+    fun handles(): List<Corner> = points + points.indices.map { i ->
+        val a = points[i]; val b = points[(i + 1) % 4]; Corner((a.x + b.x) / 2, (a.y + b.y) / 2)
+    }
+    fun move(handle: Int, dx: Float, dy: Float): Crop {
+        if (handle !in 0..7 || !dx.isFinite() || !dy.isFinite()) return this
+        val indices = if (handle < 4) listOf(handle) else listOf(handle - 4, (handle - 3) % 4)
+        val x = dx.coerceIn(indices.maxOf { -points[it].x }, indices.minOf { 1f - points[it].x })
+        val y = dy.coerceIn(indices.maxOf { -points[it].y }, indices.minOf { 1f - points[it].y })
+        val candidate = Crop(points.mapIndexed { i, p -> if (i in indices) Corner(p.x + x, p.y + y) else p })
+        return if (candidate.valid()) candidate else this
+    }
     fun valid(): Boolean {
         if (points.size != 4 || points.any { !it.x.isFinite() || !it.y.isFinite() || it.x !in 0f..1f || it.y !in 0f..1f }) return false
         val crosses = points.indices.map { i ->
