@@ -59,11 +59,17 @@ import kotlin.math.min
                 if (!disposed && now-last >= 200) {
                     last = now
                     val plane = frame.planes[0]
-                    val paddedWidth = plane.rowStride / plane.pixelStride
-                    val padded = Bitmap.createBitmap(paddedWidth, frame.height, Bitmap.Config.ARGB_8888)
-                    val buffer = plane.buffer; buffer.rewind(); padded.copyPixelsFromBuffer(buffer)
-                    val cropped = Bitmap.createBitmap(padded, 0, 0, frame.width, frame.height)
-                    if (cropped !== padded) padded.recycle()
+                    val packed = java.nio.ByteBuffer.allocateDirect(frame.width*frame.height*4)
+                    val buffer = plane.buffer.duplicate()
+                    for (row in 0 until frame.height) {
+                        val offset = row*plane.rowStride
+                        if (plane.pixelStride == 4) {
+                            val line = buffer.duplicate(); line.position(offset); line.limit(offset+frame.width*4); packed.put(line)
+                        } else for (column in 0 until frame.width) { val offsetPixel = offset+column*plane.pixelStride; for (channel in 0..3) packed.put(buffer.get(offsetPixel+channel)) }
+                    }
+                    packed.rewind()
+                    val cropped = Bitmap.createBitmap(frame.width, frame.height, Bitmap.Config.ARGB_8888)
+                    cropped.copyPixelsFromBuffer(packed)
                     val oriented = Bitmap.createBitmap(cropped, 0, 0, cropped.width, cropped.height, Matrix().apply { postRotate(frame.imageInfo.rotationDegrees.toFloat()) }, true)
                     if (oriented !== cropped) cropped.recycle()
                     try {

@@ -11,11 +11,15 @@ import org.opencv.core.Mat
 import org.opencv.core.MatOfPoint2f
 import org.opencv.core.Point
 import org.opencv.core.Size
+import org.opencv.core.Scalar
 import org.opencv.imgproc.Imgproc
 import java.io.File
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlin.math.abs
+import kotlin.math.sin
+import kotlin.math.cos
 
 object ImageProcessor {
     private val lock = Any()
@@ -73,6 +77,21 @@ object ImageProcessor {
                 Filter.Original -> Unit
             }
             rgb.convertTo(adjusted, -1, page.contrast.toDouble(), 128.0 * (1 - page.contrast) + page.brightness)
+            if (page.straighten != 0f) {
+                val angle = page.straighten.coerceIn(-10f,10f).toDouble()
+                val radians = Math.toRadians(angle)
+                val width = adjusted.cols(); val height = adjusted.rows()
+                val newWidth = kotlin.math.ceil(width*abs(cos(radians))+height*abs(sin(radians))).toInt()
+                val newHeight = kotlin.math.ceil(height*abs(cos(radians))+width*abs(sin(radians))).toInt()
+                val matrix = Imgproc.getRotationMatrix2D(Point(width/2.0,height/2.0),angle,1.0)
+                val straight = Mat()
+                try {
+                    matrix.put(0,2,matrix.get(0,2)[0]+(newWidth-width)/2.0)
+                    matrix.put(1,2,matrix.get(1,2)[0]+(newHeight-height)/2.0)
+                    Imgproc.warpAffine(adjusted,straight,matrix,Size(newWidth.toDouble(),newHeight.toDouble()),Imgproc.INTER_LINEAR,Core.BORDER_CONSTANT,Scalar.all(255.0))
+                    straight.copyTo(adjusted)
+                } finally { matrix.release(); straight.release() }
+            }
             if (page.rotation != 0) Core.rotate(adjusted, adjusted, when (page.rotation) { 90 -> Core.ROTATE_90_CLOCKWISE; 180 -> Core.ROTATE_180; else -> Core.ROTATE_90_COUNTERCLOCKWISE })
             Bitmap.createBitmap(adjusted.cols(), adjusted.rows(), Bitmap.Config.ARGB_8888).also { Utils.matToBitmap(adjusted, it) }
         } finally { if (!bitmap.isRecycled) bitmap.recycle(); source.release(); warped.release(); rgb.release(); adjusted.release(); src.release(); dst.release(); transform?.release() }

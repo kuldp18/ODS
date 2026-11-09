@@ -17,7 +17,8 @@ import java.util.UUID
 @Entity(foreignKeys = [ForeignKey(entity = Document::class, parentColumns = ["id"], childColumns = ["documentId"], onDelete = ForeignKey.CASCADE)], indices = [Index("documentId")])
 data class Page(@PrimaryKey val id: String = UUID.randomUUID().toString(), val documentId: String, val original: String, val position: Int,
     val crop: String = Crop.Full.encode(), val filter: String = Filter.Auto.name, val rotation: Int = 0, val contrast: Float = 1f,
-    @ColumnInfo(defaultValue = "0") val brightness: Float = 0f, @ColumnInfo(defaultValue = "12") val threshold: Float = 12f)
+    @ColumnInfo(defaultValue = "0") val brightness: Float = 0f, @ColumnInfo(defaultValue = "12") val threshold: Float = 12f,
+    @ColumnInfo(defaultValue = "0") val straighten: Float = 0f)
 data class DocumentPages(@Embedded val document: Document, @Relation(parentColumn = "id", entityColumn = "documentId") val pages: List<Page>) {
     fun ordered() = pages.sortedWith(compareBy<Page> { it.position }.thenBy { it.id })
 }
@@ -39,7 +40,7 @@ data class DocumentPages(@Embedded val document: Document, @Relation(parentColum
         return merged.id
     }
 }
-@Database(entities = [Document::class, Page::class], version = 2, exportSchema = false)
+@Database(entities = [Document::class, Page::class], version = 3, exportSchema = false)
 abstract class ScannerDatabase : RoomDatabase() { abstract fun dao(): ScannerDao }
 
 class Repository(val context: Context) {
@@ -49,6 +50,8 @@ class Repository(val context: Context) {
             db.execSQL("ALTER TABLE Page ADD COLUMN brightness REAL NOT NULL DEFAULT 0")
             db.execSQL("ALTER TABLE Page ADD COLUMN threshold REAL NOT NULL DEFAULT 12")
         }
+    }, object : Migration(2, 3) {
+        override fun migrate(db: SupportSQLiteDatabase) { db.execSQL("ALTER TABLE Page ADD COLUMN straighten REAL NOT NULL DEFAULT 0") }
     }).build()
     val dao = db.dao()
     private val originals = File(context.filesDir, "originals").apply { mkdirs() }

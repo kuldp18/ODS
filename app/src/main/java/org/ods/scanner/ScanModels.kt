@@ -46,7 +46,8 @@ object ScanModels {
             input[pixels.size + index] = ((pixel shr 8) and 255) / 255f
             input[2 * pixels.size + index] = ((pixel shr 16) and 255) / 255f
         }
-        OnnxTensor.createTensor(environment, FloatBuffer.wrap(input), longArrayOf(1,3,256,256)).use { tensor ->
+        val direct = ByteBuffer.allocateDirect(input.size * 4).order(ByteOrder.nativeOrder()).asFloatBuffer().apply { put(input); rewind() }
+        OnnxTensor.createTensor(environment, direct, longArrayOf(1,3,256,256)).use { tensor ->
             corners.run(mapOf("img" to tensor)).use { result ->
                 val confidence = (result.get("has_obj").get() as OnnxTensor).floatBuffer.get(0)
                 if (!confidence.isFinite() || confidence < .65f) return null

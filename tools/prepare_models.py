@@ -1,6 +1,7 @@
 """Acquire public model weights for packaging; run on the build host, never the phone."""
 import hashlib
 import json
+import os
 from pathlib import Path
 import urllib.request
 
@@ -9,7 +10,10 @@ DEST = ROOT / "app/src/main/assets/models"
 DEST.mkdir(parents=True, exist_ok=True)
 
 def fetch(url, maximum=24 * 1024 * 1024):
-    request = urllib.request.Request(url, headers={"User-Agent": "ODS-build"})
+    headers = {"User-Agent": "ODS-build"}
+    if url.startswith('https://api.github.com/') and os.environ.get('GH_TOKEN'):
+        headers['Authorization'] = 'Bearer ' + os.environ['GH_TOKEN']
+    request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=90) as response:
         data = response.read(maximum + 1)
     if len(data) > maximum:

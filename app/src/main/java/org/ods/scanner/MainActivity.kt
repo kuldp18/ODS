@@ -74,10 +74,10 @@ private val Light = lightColorScheme(primary = Color(0xFF365B0A), background = C
             Column(Modifier.safeDrawingPadding()) {
                 if (vm.busy) { LinearProgressIndicator(Modifier.fillMaxWidth()); TextButton(onClick = vm::cancel) { Text("Cancel operation") } }
                 vm.error?.let { message -> AlertDialog(onDismissRequest = { vm.error = null }, title = { Text("Could not complete") }, text = { Text(message) }, confirmButton = { TextButton(onClick = { vm.error = null }) { Text("OK") } }) }
-                BackHandler(vm.screen != "library") { edit = null; vm.screen = "library" }
+                BackHandler(vm.screen != "library") { val destination = if (vm.screen in listOf("crop","enhance")) "document" else "library"; edit = null; vm.screen = destination }
                 when (vm.screen) {
                     "camera" -> CameraScreen(vm)
-                    "crop" -> edit?.let { CropScreen(vm, it, onApply = { crop -> vm.update(it.copy(crop = crop.encode())); edit = null; vm.screen = "document" }, onBack = { edit = null; vm.screen = "document" }) }
+                    "crop" -> edit?.let { CropScreen(vm, it, onApply = { crop, rotation, straighten -> vm.update(it.copy(crop = crop.encode(), rotation = rotation, straighten = straighten)); edit = null; vm.screen = "document" }, onBack = { edit = null; vm.screen = "document" }) }
                     "enhance" -> page?.let { EnhanceScreen(vm, it, pages) { vm.screen = "document" } }
                     "export" -> ExportScreen(vm, documents.filter { it.document.id in exportIds }.map { entry -> if (exportPages.isEmpty()) entry else entry.copy(pages = entry.pages.filter { it.id in exportPages }) }) { vm.screen = "library" }
                     "settings" -> Column(Modifier.padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(20.dp)) {

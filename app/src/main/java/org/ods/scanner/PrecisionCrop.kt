@@ -20,7 +20,9 @@ import androidx.compose.ui.unit.*
 import kotlinx.coroutines.*
 import kotlin.math.*
 
-@Composable fun CropScreen(vm: ScannerViewModel, page: Page, onApply: (Crop) -> Unit, onBack: () -> Unit) {
+private data class CropEdit(val crop: Crop, val rotation: Int, val straighten: Float)
+
+@Composable fun CropScreen(vm: ScannerViewModel, page: Page, onApply: (Crop, Int, Float) -> Unit, onBack: () -> Unit) {
     var bitmap by remember { mutableStateOf<Bitmap?>(null) }
     var crop by remember(page.id) { mutableStateOf(Crop.decode(page.crop)) }
     var selected by remember { mutableIntStateOf(0) }
@@ -29,10 +31,15 @@ import kotlin.math.*
     var zoom by remember { mutableFloatStateOf(1f) }
     var pan by remember { mutableStateOf(Offset.Zero) }
     var detecting by remember { mutableStateOf(false) }
+    var rotation by remember { mutableIntStateOf(page.rotation) }
+    var straighten by remember { mutableFloatStateOf(page.straighten) }
+    var precision by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf("Drag corners or edge midpoints to fit the page") }
     val scope = rememberCoroutineScope()
-    val history = remember { mutableStateListOf<Crop>() }; val future = remember { mutableStateListOf<Crop>() }
-    fun checkpoint() { if (history.size >= 50) history.removeAt(0); history.add(crop); future.clear() }
+    val history = remember { mutableStateListOf<CropEdit>() }; val future = remember { mutableStateListOf<CropEdit>() }
+    fun snapshot() = CropEdit(crop,rotation,straighten)
+    fun restore(edit: CropEdit) { crop = edit.crop; rotation = edit.rotation; straighten = edit.straighten }
+    fun checkpoint() { if (history.size >= 50) history.removeAt(0); history.add(snapshot()); future.clear() }
     LaunchedEffect(page.original) {
         try { bitmap = withContext(Dispatchers.IO) { ImageProcessor.decode(vm.repository.file(page), 1600) } }
         catch (e: CancellationException) { throw e } catch (e: Exception) { vm.error = e.message }
@@ -41,14 +48,15 @@ import kotlin.math.*
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("Back") }
             Text("Adjust crop", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
-            TextButton(onClick = { checkpoint(); crop = Crop.decode(page.crop); zoom = 1f; pan = Offset.Zero }) { Text("Reset") }
+            TextButton(onClick = { checkpoint(); restore(CropEdit(Crop.decode(page.crop),page.rotation,page.straighten)); zoom = 1f; pan = Offset.Zero }) { Text("Reset") }
         }
         Box(Modifier.weight(1f).fillMaxWidth().clip(MaterialTheme.shapes.medium).background(Color(0xFF101315)), contentAlignment = Alignment.Center) {
             bitmap?.let { image ->
                 BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     val ratio = image.width.toFloat() / image.height
-                    val width = minOf(maxWidth - 24.dp, (maxHeight - 24.dp) * ratio)
-                    Box(Modifier.width(width).aspectRatio(ratio).graphicsLayer { scaleX = zoom; scaleY = zoom; translationX = pan.x; translationY = pan.y }) {
+                    val rotated = rotation % 180 != 0
+                    val width = minOf(((if (rotated) maxHeight else maxWidth) - 24.dp).coerceAtLeast(1.dp), (((if (rotated) maxWidth else maxHeight) - 24.dp) * ratio).coerceAtLeast(1.dp))
+                    Box(Modifier.width(width).aspectRatio(ratio).graphicsLayer { rotationZ = rotation.toFloat() - straighten; scaleX = zoom; scaleY = zoom; translationX = pan.x; translationY = pan.y }) {
                         Image(image.asImageBitmap(), "Original page", Modifier.fillMaxSize())
                         Canvas(Modifier.fillMaxSize().pointerInput(image, zoomMode) {
                             if (zoomMode) detectTransformGestures { _, delta, scale, _ ->
@@ -103,17 +111,29 @@ import kotlin.math.*
                 catch (e: CancellationException) { throw e } catch (e: Exception) { vm.error = e.message } finally { detecting = false }
             } }) { Text(if (detecting) "Detecting…" else "Auto-detect") }
             OutlinedButton(onClick = { checkpoint(); crop = Crop.Full }) { Text("Full image") }
+            OutlinedButton(onClick = { checkpoint(); rotation = (rotation + 90) % 360; zoom = 1f; pan = Offset.Zero }) { Text("Rotate") }
             FilterChip(selected = zoomMode, onClick = { zoomMode = !zoomMode }, label = { Text(if (zoomMode) "Zoom / pan" else "Edit handles") })
             TextButton(onClick = { zoom = 1f; pan = Offset.Zero }) { Text("Fit") }
-            TextButton(enabled = history.isNotEmpty(), onClick = { future.add(crop); crop = history.removeAt(history.lastIndex) }) { Text("Undo") }
-            TextButton(enabled = future.isNotEmpty(), onClick = { history.add(crop); crop = future.removeAt(future.lastIndex) }) { Text("Redo") }
+            TextButton(enabled = history.isNotEmpty(), onClick = { future.add(snapshot()); restore(history.removeAt(history.lastIndex)) }) { Text("Undo") }
+            TextButton(enabled = future.isNotEmpty(), onClick = { history.add(snapshot()); restore(future.removeAt(future.lastIndex)) }) { Text("Redo") }
         }
+        TextButton(onClick = { precision = !precision }) { Text(if (precision) "Hide precision controls" else "Precision controls") }
+        if (precision) {
+            Text("Straighten ${"%.1f".format(straighten)}°")
+            var sliding by remember { mutableStateOf(false) }
+            Slider(value = straighten, onValueChange = { if (!sliding) { checkpoint(); sliding = true }; straighten = it }, onValueChangeFinished = { sliding = false }, valueRange = -10f..10f)
+            Row(Modifier.horizontalScroll(rememberScrollState())) {
+                listOf("Top left", "Top right", "Bottom right", "Bottom left", "Top edge", "Right edge", "Bottom edge", "Left edge").forEachIndexed { index, label ->
+                    FilterChip(selected = selected == index, onClick = { selected = index }, label = { Text(label) })
+                }
+            }
         Row(Modifier.horizontalScroll(rememberScrollState()), verticalAlignment = Alignment.CenterVertically) {
-            Text("Fine adjust ${selected + 1}")
+            Text("Nudge")
             listOf("←" to Corner(-1f, 0f), "↑" to Corner(0f, -1f), "↓" to Corner(0f, 1f), "→" to Corner(1f, 0f)).forEach { (label, direction) ->
                 TextButton(enabled = bitmap != null, onClick = { bitmap?.let { checkpoint(); crop = crop.move(selected, direction.x / it.width, direction.y / it.height) } }) { Text(label) }
             }
         }
-        Button(enabled = bitmap != null && !vm.busy && !detecting, onClick = { onApply(crop) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Apply crop") }
+        }
+        Button(enabled = bitmap != null && !vm.busy && !detecting, onClick = { onApply(crop, rotation, straighten) }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text("Apply crop") }
     }
 }

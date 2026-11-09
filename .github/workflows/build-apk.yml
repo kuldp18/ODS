@@ -47,6 +47,8 @@ jobs:
           gradle --version
 
       - name: Package and smoke-test offline vision models
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           python3 -m pip install onnxruntime==1.20.1 ai-edge-litert==1.4.0
           python3 tools/prepare_models.py

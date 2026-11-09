@@ -12,7 +12,6 @@ import java.util.zip.*
 class Exporter(private val repository: Repository) {
     suspend fun generate(documents: List<DocumentPages>, format: Format, quality: Quality, filename: String, merge: Boolean, paper: PaperSize = PaperSize.Auto, archiveFormat: Format = Format.PDF): List<File> = withContext(Dispatchers.IO) {
         require(documents.isNotEmpty() && documents.any { it.pages.isNotEmpty() }) { "Add a page first" }
-        require(documents.sumOf { it.pages.size } <= 50) { "Export up to 50 pages at a time until large-document memory profiling is complete" }
         val directory = File(repository.context.cacheDir, "exports/${UUID.randomUUID()}").apply { check(mkdirs()) }
         require(directory.usableSpace > 32L * 1024 * 1024) { "At least 32 MB of free space is needed" }
         val name = safeName(filename)
