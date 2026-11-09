@@ -40,10 +40,15 @@ import kotlin.math.min
     fun shutter() {
         if (taking || vm.busy) return
         taking = true
+        auto = false
         val file = vm.repository.captureFile()
         capture.targetRotation = preview.display?.rotation ?: 0
         capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), main, object : ImageCapture.OnImageSavedCallback {
-            override fun onImageSaved(result: ImageCapture.OutputFileResults) { taking = false; vm.captured(file) }
+            override fun onImageSaved(result: ImageCapture.OutputFileResults) {
+                provider?.unbindAll()
+                vm.screen = "document"
+                vm.captured(file)
+            }
             override fun onError(exception: ImageCaptureException) { taking = false; file.delete(); vm.error = exception.message }
         })
     }
@@ -103,7 +108,7 @@ import kotlin.math.min
     }
     Column(Modifier.fillMaxSize().background(Color(0xFF101315)).padding(24.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(onClick = { vm.screen = "library" }) { Text("Close", color = Color(0xFFD4F77D)) }
+            TextButton(enabled = !taking, onClick = { vm.screen = if (count > 0) "document" else "library" }) { Text("Back", color = Color(0xFFD4F77D)) }
             TextButton(onClick = { flash = !flash; capture.flashMode = if (flash) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF }) { Text(if (flash) "Flash on" else "Flash off", color = Color(0xFFD4F77D)) }
         }
         Box(Modifier.weight(1f).fillMaxWidth()) {
@@ -117,11 +122,9 @@ import kotlin.math.min
                 }
             }
         }
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) { Switch(auto, { auto = it }); Text(if (auto) "Auto capture • Hold steady" else "Manual capture", color = Color.White) }
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) { Switch(auto, { auto = it }, enabled = !taking); Text(if (auto) "Auto capture • Hold steady" else "Manual capture", color = Color.White) }
         Text(if (detected != null) "Page detected" else "Keep the whole page in view", Modifier.padding(vertical = 8.dp), color = Color.White)
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            Button(enabled = !taking && !vm.busy, onClick = { shutter() }, modifier = Modifier.weight(1f)) { Text("Capture page") }
-            OutlinedButton(enabled = !taking && !vm.busy, onClick = { vm.screen = "document" }) { Text("Done ($count)", color = Color(0xFFD4F77D)) }
-        }
+        Button(enabled = !taking && !vm.busy, onClick = { shutter() }, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp)) { Text(if (taking) "Saving page…" else "Capture page") }
+        Text("Capture one page, then review it", color = Color(0xFFA8B1AD), modifier = Modifier.padding(top = 12.dp))
     }
 }

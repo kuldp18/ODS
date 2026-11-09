@@ -68,6 +68,10 @@ private val Light = lightColorScheme(primary = Color(0xFF365B0A), background = C
     fun scan() { if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) vm.screen = "camera" else permission.launch(Manifest.permission.CAMERA) }
     val document = documents.firstOrNull { it.document.id == vm.activeId }
     val pages = document?.ordered().orEmpty()
+    LaunchedEffect(vm.reviewPageId, pages) {
+        val index = pages.indexOfFirst { it.id == vm.reviewPageId }
+        if (index >= 0) { pageIndex = index; vm.reviewedPage() }
+    }
     val page = pages.getOrNull(pageIndex.coerceIn(0, (pages.size - 1).coerceAtLeast(0)))
     MaterialTheme(colorScheme = if (theme == "Dark" || (theme == "System" && isSystemInDarkTheme())) Dark else Light, shapes = Shapes(medium = RoundedCornerShape(16.dp))) {
         Surface(Modifier.fillMaxSize()) {

@@ -18,6 +18,9 @@ class ScannerViewModel(application: Application, private val savedState: SavedSt
         private set
     fun openDocument(id: String?) { activeId = id; savedState["documentId"] = id }
     var screen by mutableStateOf("library")
+    var reviewPageId by mutableStateOf<String?>(null)
+        private set
+    fun reviewedPage() { reviewPageId = null }
     var busy by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var exports by mutableStateOf<List<File>>(emptyList())
@@ -57,6 +60,8 @@ class ScannerViewModel(application: Application, private val savedState: SavedSt
         val position = repository.dao.nextPosition(document.id)
         val page = Page(documentId = document.id, original = file.name, position = position)
         repository.dao.insert(page)
+        reviewPageId = page.id
+        screen = "document"
         val crop = withContext(Dispatchers.Default) {
             val preview = ImageProcessor.decode(file, 640)
             try { DocumentDetector.detect(preview) ?: Crop.Full } finally { preview.recycle() }
@@ -64,7 +69,8 @@ class ScannerViewModel(application: Application, private val savedState: SavedSt
         repository.dao.update(page.copy(crop = crop.encode()))
     }
     fun update(page: Page) = work { repository.dao.update(page) }
-    fun export(docs: List<DocumentPages>, format: Format, quality: Quality, name: String, merge: Boolean, paper: PaperSize = PaperSize.Auto, archive: Format = Format.PDF) = work {
+    fun export(docs: List<DocumentPages>, format: Format, quality: Quality, name: String, merge: Boolean, paper: PaperSize = PaperSize.Auto, archive: Format = Format.PDF, onReady: (() -> Unit)? = null) = work {
         exports = Exporter(repository).generate(docs, format, quality, name, merge, paper, archive)
+        onReady?.invoke()
     }
 }
