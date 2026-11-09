@@ -16,13 +16,13 @@ import kotlinx.coroutines.*
 import android.graphics.Bitmap
 import kotlin.math.hypot
 
-@Composable fun PageImage(vm: ScannerViewModel, page: Page, modifier: Modifier = Modifier) {
-    var bitmap by remember { mutableStateOf<Bitmap?>(null) }
+@Composable fun PageImage(vm: ScannerViewModel, page: Page, modifier: Modifier = Modifier, maxEdge: Int = 1200) {
+    var bitmap by remember(page.id) { mutableStateOf<Bitmap?>(null) }
     var failure by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(page) {
+    LaunchedEffect(page, maxEdge) {
         delay(120)
         failure = null
-        try { bitmap = withContext(Dispatchers.Default) { ImageProcessor.render(vm.repository.file(page), page, 1200) } }
+        try { bitmap = withContext(Dispatchers.Default) { PreviewCache.get(vm.repository, page, maxEdge) } }
         catch (e: CancellationException) { throw e }
         catch (e: Exception) { failure = e.message }
     }
@@ -37,20 +37,29 @@ import kotlin.math.hypot
     var recipe by remember(page.id) { mutableStateOf(page) }
     var all by remember { mutableStateOf(false) }
     var compare by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row { TextButton(onClick = onBack) { Text("Back") }; Text("Enhance", style = MaterialTheme.typography.headlineMedium) }
         PageImage(vm, if (compare) recipe.copy(filter = Filter.Original.name, contrast = 1f, brightness = 0f) else recipe, Modifier.weight(1f).fillMaxWidth())
         TextButton(onClick = { compare = !compare }) { Text(if (compare) "Show edited" else "Compare original") }
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Filter.entries.forEach { filter -> FilterChip(selected = recipe.filter == filter.name, onClick = { recipe = recipe.copy(filter = filter.name) }, label = { Text(when(filter) { Filter.BW -> "B&W"; Filter.LowLight -> "Low light"; else -> filter.name }) }) }
+            Filter.entries.forEach { filter ->
+                Column(Modifier.width(72.dp).clickable { recipe = recipe.copy(filter = filter.name) }.border(if (recipe.filter == filter.name) 2.dp else 0.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.small).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    PageImage(vm, recipe.copy(filter = filter.name), Modifier.height(78.dp).fillMaxWidth(), maxEdge = 160)
+                    Text(when(filter) { Filter.BW -> "B&W"; Filter.LowLight -> "Low light"; else -> filter.name }, style = MaterialTheme.typography.labelSmall)
+                }
+            }
         }
         Text("Contrast ${"%.2f".format(recipe.contrast)}")
         Slider(value = recipe.contrast, onValueChange = { recipe = recipe.copy(contrast = it) }, valueRange = .5f..1.5f)
-        Text("Brightness ${recipe.brightness.toInt()}")
-        Slider(value = recipe.brightness, onValueChange = { recipe = recipe.copy(brightness = it) }, valueRange = -64f..64f)
-        if (recipe.filter == Filter.BW.name) {
-            Text("B&W threshold ${recipe.threshold.toInt()}")
-            Slider(value = recipe.threshold, onValueChange = { recipe = recipe.copy(threshold = it) }, valueRange = -10f..30f)
+        var adjustments by remember { mutableStateOf(false) }
+        TextButton(onClick = { adjustments = !adjustments }) { Text(if (adjustments) "Hide adjustments" else "More adjustments") }
+        if (adjustments) Column(Modifier.heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
+            Text("Brightness ${recipe.brightness.toInt()}")
+            Slider(value = recipe.brightness, onValueChange = { recipe = recipe.copy(brightness = it) }, valueRange = -64f..64f)
+            if (recipe.filter == Filter.BW.name) {
+                Text("B&W threshold ${recipe.threshold.toInt()}")
+                Slider(value = recipe.threshold, onValueChange = { recipe = recipe.copy(threshold = it) }, valueRange = -10f..30f)
+            }
         }
         Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(all, { all = it }); Text("Apply filter to all ${pages.size} pages") }
         TextButton(onClick = { recipe = page.copy(filter = Filter.Original.name, contrast = 1f, brightness = 0f, threshold = 12f) }) { Text("Reset adjustments") }

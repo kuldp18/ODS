@@ -25,11 +25,19 @@ data class DocumentPages(@Embedded val document: Document, @Relation(parentColum
     @Transaction @Query("SELECT * FROM Document ORDER BY created DESC") fun observe(): Flow<List<DocumentPages>>
     @Insert suspend fun insert(document: Document)
     @Insert suspend fun insert(page: Page)
+    @Query("SELECT * FROM Document WHERE id = :id LIMIT 1") suspend fun document(id: String): Document?
+    @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM Page WHERE documentId = :id") suspend fun nextPosition(id: String): Int
     @Update suspend fun update(page: Page)
     @Update suspend fun update(document: Document)
     @Query("DELETE FROM Document WHERE id = :id") suspend fun delete(id: String)
     @Query("DELETE FROM Page WHERE id = :id") suspend fun deletePage(id: String)
     @Transaction suspend fun reorder(pages: List<Page>) { pages.forEachIndexed { index, page -> update(page.copy(position = index)) } }
+    @Transaction suspend fun restore(documents: List<DocumentPages>) { documents.forEach { insert(it.document); it.ordered().forEach { page -> insert(page) } } }
+    @Transaction suspend fun merge(documents: List<DocumentPages>, title: String): String {
+        val merged = Document(title = title); insert(merged)
+        documents.flatMap { it.ordered() }.forEachIndexed { index, page -> insert(page.copy(id = UUID.randomUUID().toString(), documentId = merged.id, position = index)) }
+        return merged.id
+    }
 }
 @Database(entities = [Document::class, Page::class], version = 2, exportSchema = false)
 abstract class ScannerDatabase : RoomDatabase() { abstract fun dao(): ScannerDao }
@@ -48,6 +56,7 @@ class Repository(val context: Context) {
     fun captureFile() = File(originals, "${UUID.randomUUID()}.jpg")
     suspend fun import(uri: Uri, document: Document, position: Int): Page = withContext(Dispatchers.IO) {
         val target = captureFile(); val temp = File(target.path + ".part")
+        var committed = false
         try {
             context.contentResolver.openInputStream(uri).use { input ->
                 requireNotNull(input) { "Cannot open this image" }
@@ -58,10 +67,11 @@ class Repository(val context: Context) {
             }
             ImageProcessor.decode(temp, 128).recycle() // Reject corrupt/unsupported content before committing.
             check(temp.renameTo(target)) { "Could not save image" }
+            val page = Page(documentId = document.id, original = target.name, position = position)
+            dao.insert(page); committed = true
             val preview = ImageProcessor.decode(target, 640)
             val crop = try { DocumentDetector.detect(preview) ?: Crop.Full } finally { preview.recycle() }
-            val page = Page(documentId = document.id, original = target.name, position = position, crop = crop.encode())
-            dao.insert(page); page
-        } catch (error: Exception) { temp.delete(); target.delete(); throw error }
+            val edited = page.copy(crop = crop.encode()); dao.update(edited); edited
+        } catch (error: Exception) { temp.delete(); if (!committed) target.delete(); throw error }
     }
 }

@@ -41,4 +41,5 @@ data class Crop(val points: List<Corner>) {
 enum class Filter { Original, Auto, BW, Gray, Color, LowLight }
 enum class Format(val extension: String, val mime: String) { PDF("pdf", "application/pdf"), JPEG("jpg", "image/jpeg"), PNG("png", "image/png"), ZIP("zip", "application/zip") }
 enum class Quality(val longEdge: Int, val jpeg: Int) { Small(1400, 65), Balanced(2400, 85), Best(4000, 95) }
+enum class PaperSize { Auto, A4, Letter }
 fun safeName(name: String): String = name.replace(Regex("[^\\p{L}\\p{M}\\p{N} ._-]"), "_").trim(' ', '.').take(80).ifBlank { "Document" }

@@ -21,6 +21,16 @@ class ScannerViewModel(application: Application, private val savedState: SavedSt
     var busy by mutableStateOf(false)
     var error by mutableStateOf<String?>(null)
     var exports by mutableStateOf<List<File>>(emptyList())
+    var deleted by mutableStateOf<List<DocumentPages>>(emptyList())
+        private set
+    fun delete(ids: Set<String>) = work {
+        val snapshot = documents.value.filter { it.document.id in ids }
+        snapshot.forEach { repository.dao.delete(it.document.id) }; deleted = snapshot
+    }
+    fun undoDelete() = work { repository.dao.restore(deleted); deleted = emptyList() }
+    fun merge(ids: Set<String>) = work {
+        openDocument(repository.dao.merge(documents.value.filter { it.document.id in ids }, "Merged document")); screen = "document"
+    }
     private var job: Job? = null
     fun work(block: suspend () -> Unit) {
         if (busy) return
@@ -31,28 +41,30 @@ class ScannerViewModel(application: Application, private val savedState: SavedSt
     }
     fun cancel() { job?.cancel() }
     private suspend fun destination(): Document {
-        val existing = documents.value.firstOrNull { it.document.id == activeId }?.document
+        val existing = activeId?.let { repository.dao.document(it) }
         if (existing != null) return existing
         return Document(title = "Scan ${java.text.SimpleDateFormat("dd MMM HH.mm", java.util.Locale.getDefault()).format(java.util.Date())}").also { repository.dao.insert(it); openDocument(it.id) }
     }
     fun import(uris: List<Uri>) = work {
         if (uris.isEmpty()) return@work
         val document = destination()
-        val start = documents.value.firstOrNull { it.document.id == document.id }?.pages?.maxOfOrNull { it.position }?.plus(1) ?: 0
+        val start = repository.dao.nextPosition(document.id)
         uris.forEachIndexed { index, uri -> repository.import(uri, document, start + index) }
         screen = "document"
     }
     fun captured(file: File) = work {
         val document = destination()
-        val position = documents.value.firstOrNull { it.document.id == document.id }?.pages?.maxOfOrNull { it.position }?.plus(1) ?: 0
+        val position = repository.dao.nextPosition(document.id)
+        val page = Page(documentId = document.id, original = file.name, position = position)
+        repository.dao.insert(page)
         val crop = withContext(Dispatchers.Default) {
             val preview = ImageProcessor.decode(file, 640)
             try { DocumentDetector.detect(preview) ?: Crop.Full } finally { preview.recycle() }
         }
-        repository.dao.insert(Page(documentId = document.id, original = file.name, position = position, crop = crop.encode()))
+        repository.dao.update(page.copy(crop = crop.encode()))
     }
     fun update(page: Page) = work { repository.dao.update(page) }
-    fun export(docs: List<DocumentPages>, format: Format, quality: Quality, name: String, merge: Boolean) = work {
-        exports = Exporter(repository).generate(docs, format, quality, name, merge)
+    fun export(docs: List<DocumentPages>, format: Format, quality: Quality, name: String, merge: Boolean, paper: PaperSize = PaperSize.Auto, archive: Format = Format.PDF) = work {
+        exports = Exporter(repository).generate(docs, format, quality, name, merge, paper, archive)
     }
 }

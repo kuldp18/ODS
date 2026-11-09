@@ -10,19 +10,21 @@ import java.util.UUID
 import java.util.zip.*
 
 class Exporter(private val repository: Repository) {
-    suspend fun generate(documents: List<DocumentPages>, format: Format, quality: Quality, filename: String, merge: Boolean): List<File> = withContext(Dispatchers.IO) {
+    suspend fun generate(documents: List<DocumentPages>, format: Format, quality: Quality, filename: String, merge: Boolean, paper: PaperSize = PaperSize.Auto, archiveFormat: Format = Format.PDF): List<File> = withContext(Dispatchers.IO) {
         require(documents.isNotEmpty() && documents.any { it.pages.isNotEmpty() }) { "Add a page first" }
         require(documents.sumOf { it.pages.size } <= 50) { "Export up to 50 pages at a time until large-document memory profiling is complete" }
         val directory = File(repository.context.cacheDir, "exports/${UUID.randomUUID()}").apply { check(mkdirs()) }
         require(directory.usableSpace > 32L * 1024 * 1024) { "At least 32 MB of free space is needed" }
         val name = safeName(filename)
+        val outputFormat = if (format == Format.ZIP) archiveFormat else format
+        require(outputFormat != Format.ZIP)
         try {
             val groups = if (merge) listOf(documents.flatMap { it.ordered() }) else documents.map { it.ordered() }.filter { it.isNotEmpty() }
             val outputs = mutableListOf<File>()
             for ((index, pages) in groups.withIndex()) {
                 ensureActive()
                 val base = if (groups.size == 1) name else "$name-${index + 1}"
-                if (format == Format.PDF || format == Format.ZIP) {
+                if (outputFormat == Format.PDF) {
                     val target = File(directory, "$base.pdf")
                     val pdf = PdfDocument()
                     try {
@@ -30,10 +32,14 @@ class Exporter(private val repository: Repository) {
                             ensureActive()
                             val bitmap = ImageProcessor.render(repository.file(page), page, quality.longEdge)
                             try {
-                                val width = 595; val height = (width.toFloat() * bitmap.height / bitmap.width).toInt().coerceAtLeast(1)
+                                val width = if (paper == PaperSize.Letter) 612 else 595
+                                val height = when (paper) { PaperSize.A4 -> 842; PaperSize.Letter -> 792; else -> (width.toFloat() * bitmap.height / bitmap.width).toInt().coerceAtLeast(1) }
                                 val sheet = pdf.startPage(PdfDocument.PageInfo.Builder(width, height, i + 1).create())
                                 sheet.canvas.drawColor(Color.WHITE)
-                                sheet.canvas.drawBitmap(bitmap, null, Rect(0, 0, width, height), Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
+                                val margin = if (paper == PaperSize.Auto) 0f else 18f
+                                val scale = minOf((width-2*margin)/bitmap.width, (height-2*margin)/bitmap.height)
+                                val w = bitmap.width*scale; val h = bitmap.height*scale
+                                sheet.canvas.drawBitmap(bitmap, null, RectF((width-w)/2,(height-h)/2,(width+w)/2,(height+h)/2), Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG))
                                 pdf.finishPage(sheet)
                             } finally { bitmap.recycle() }
                         }
@@ -44,8 +50,8 @@ class Exporter(private val repository: Repository) {
                         ensureActive()
                         val bitmap = ImageProcessor.render(repository.file(page), page, quality.longEdge)
                         try {
-                            val target = File(directory, "$base-${i + 1}.${format.extension}")
-                            target.outputStream().use { check(bitmap.compress(if (format == Format.PNG) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, quality.jpeg, it)) }
+                            val target = File(directory, "$base-${i + 1}.${outputFormat.extension}")
+                            target.outputStream().use { check(bitmap.compress(if (outputFormat == Format.PNG) Bitmap.CompressFormat.PNG else Bitmap.CompressFormat.JPEG, quality.jpeg, it)) }
                             outputs += target
                         } finally { bitmap.recycle() }
                     }
