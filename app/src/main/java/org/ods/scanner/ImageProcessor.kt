@@ -61,13 +61,18 @@ object ImageProcessor {
             Imgproc.warpPerspective(source, warped, transform, Size(w.toDouble(), h.toDouble()), Imgproc.INTER_LINEAR, Core.BORDER_REPLICATE)
             Imgproc.cvtColor(warped, rgb, Imgproc.COLOR_RGBA2RGB)
             when (Filter.valueOf(page.filter)) {
-                Filter.BW -> { Imgproc.cvtColor(rgb, rgb, Imgproc.COLOR_RGB2GRAY); Imgproc.adaptiveThreshold(rgb, rgb, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY, 31, 12.0) }
+                Filter.BW -> { Imgproc.cvtColor(rgb, rgb, Imgproc.COLOR_RGB2GRAY); Imgproc.adaptiveThreshold(rgb, rgb, 255.0, Imgproc.ADAPTIVE_THRESH_GAUSSIAN_C, Imgproc.THRESH_BINARY, 31, page.threshold.toDouble()) }
                 Filter.Gray -> Imgproc.cvtColor(rgb, rgb, Imgproc.COLOR_RGB2GRAY)
-                Filter.Auto -> rgb.convertTo(rgb, -1, 1.06, 3.0)
+                Filter.Auto -> {
+                    val lab = Mat(); val channels = ArrayList<Mat>(); val clahe = Imgproc.createCLAHE(2.0, Size(8.0,8.0))
+                    try { Imgproc.cvtColor(rgb, lab, Imgproc.COLOR_RGB2Lab); Core.split(lab, channels); clahe.apply(channels[0], channels[0]); Core.merge(channels, lab); Imgproc.cvtColor(lab, rgb, Imgproc.COLOR_Lab2RGB) }
+                    finally { channels.forEach { it.release() }; lab.release(); clahe.collectGarbage() }
+                }
+                Filter.LowLight -> ScanModels.enhance(rgb)
                 Filter.Color -> rgb.convertTo(rgb, -1, 1.03, 0.0)
                 Filter.Original -> Unit
             }
-            rgb.convertTo(adjusted, -1, page.contrast.toDouble(), 128.0 * (1 - page.contrast))
+            rgb.convertTo(adjusted, -1, page.contrast.toDouble(), 128.0 * (1 - page.contrast) + page.brightness)
             if (page.rotation != 0) Core.rotate(adjusted, adjusted, when (page.rotation) { 90 -> Core.ROTATE_90_CLOCKWISE; 180 -> Core.ROTATE_180; else -> Core.ROTATE_90_COUNTERCLOCKWISE })
             Bitmap.createBitmap(adjusted.cols(), adjusted.rows(), Bitmap.Config.ARGB_8888).also { Utils.matToBitmap(adjusted, it) }
         } finally { if (!bitmap.isRecycled) bitmap.recycle(); source.release(); warped.release(); rgb.release(); adjusted.release(); src.release(); dst.release(); transform?.release() }

@@ -14,6 +14,8 @@ import kotlin.math.*
 object DocumentDetector {
     private val ready by lazy { OpenCVLoader.initLocal() }
     fun detect(bitmap: Bitmap): Crop? = synchronized(this) {
+        // A missing/failed neural engine must not prevent manual or CV cropping.
+        try { ScanModels.detect(bitmap)?.let { return it } } catch (_: Exception) { } catch (_: LinkageError) { }
         if (!ready) return null
         val src = Mat(); val gray = Mat(); val edges = Mat(); val hierarchy = Mat()
         val contours = ArrayList<MatOfPoint>()

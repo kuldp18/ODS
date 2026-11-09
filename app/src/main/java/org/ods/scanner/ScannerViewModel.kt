@@ -45,7 +45,11 @@ class ScannerViewModel(application: Application, private val savedState: SavedSt
     fun captured(file: File) = work {
         val document = destination()
         val position = documents.value.firstOrNull { it.document.id == document.id }?.pages?.maxOfOrNull { it.position }?.plus(1) ?: 0
-        repository.dao.insert(Page(documentId = document.id, original = file.name, position = position))
+        val crop = withContext(Dispatchers.Default) {
+            val preview = ImageProcessor.decode(file, 640)
+            try { DocumentDetector.detect(preview) ?: Crop.Full } finally { preview.recycle() }
+        }
+        repository.dao.insert(Page(documentId = document.id, original = file.name, position = position, crop = crop.encode()))
     }
     fun update(page: Page) = work { repository.dao.update(page) }
     fun export(docs: List<DocumentPages>, format: Format, quality: Quality, name: String, merge: Boolean) = work {

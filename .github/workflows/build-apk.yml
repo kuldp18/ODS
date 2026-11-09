@@ -46,6 +46,11 @@ jobs:
           command -v gradle
           gradle --version
 
+      - name: Package and smoke-test offline vision models
+        run: |
+          python3 -m pip install onnxruntime==1.20.1 ai-edge-litert==1.4.0
+          python3 tools/prepare_models.py
+
       - name: Run unit tests and build debug APK
         run: gradle --no-daemon --stacktrace :app:testDebugUnitTest :app:assembleDebug
 

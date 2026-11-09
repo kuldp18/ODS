@@ -7,3 +7,4 @@ local.properties
 *.jks
 *.keystore
 .tools/
+app/src/main/assets/models/

@@ -5,6 +5,12 @@ This project uses AndroidX/Jetpack (Apache License 2.0), Kotlin (Apache License
 2.0), Kotlin coroutines (Apache License 2.0), and OpenCV 4.12.0 (Apache License
 2.0). No third-party application source or OCR models are bundled here.
 
+Builds also package DocAligner LCNet050 corner regression weights (Apache-2.0)
+from DocsaidLab/DocAligner and the approximately 100 KB Zero-DCE model from
+raspberrypi/AI_enhance (BSD-2-Clause, Copyright 2026 Raspberry Pi Ltd).
+Their license texts and model provenance are included in assets/models.
+ONNX Runtime and LiteRT supply offline inference. Neural enhancement is opt-in.
+
 Before distributing binaries, collect the resolved artifacts' LICENSE/NOTICE
 files and OpenCV's bundled third-party notices. This file is not a substitute
 for that release-time dependency audit.

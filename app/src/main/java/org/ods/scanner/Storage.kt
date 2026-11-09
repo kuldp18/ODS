@@ -3,6 +3,8 @@ package org.ods.scanner
 import android.content.Context
 import android.net.Uri
 import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -14,7 +16,8 @@ import java.util.UUID
 @Entity data class Document(@PrimaryKey val id: String = UUID.randomUUID().toString(), val title: String, val created: Long = System.currentTimeMillis())
 @Entity(foreignKeys = [ForeignKey(entity = Document::class, parentColumns = ["id"], childColumns = ["documentId"], onDelete = ForeignKey.CASCADE)], indices = [Index("documentId")])
 data class Page(@PrimaryKey val id: String = UUID.randomUUID().toString(), val documentId: String, val original: String, val position: Int,
-    val crop: String = Crop.Full.encode(), val filter: String = Filter.Auto.name, val rotation: Int = 0, val contrast: Float = 1f)
+    val crop: String = Crop.Full.encode(), val filter: String = Filter.Auto.name, val rotation: Int = 0, val contrast: Float = 1f,
+    @ColumnInfo(defaultValue = "0") val brightness: Float = 0f, @ColumnInfo(defaultValue = "12") val threshold: Float = 12f)
 data class DocumentPages(@Embedded val document: Document, @Relation(parentColumn = "id", entityColumn = "documentId") val pages: List<Page>) {
     fun ordered() = pages.sortedWith(compareBy<Page> { it.position }.thenBy { it.id })
 }
@@ -28,11 +31,17 @@ data class DocumentPages(@Embedded val document: Document, @Relation(parentColum
     @Query("DELETE FROM Page WHERE id = :id") suspend fun deletePage(id: String)
     @Transaction suspend fun reorder(pages: List<Page>) { pages.forEachIndexed { index, page -> update(page.copy(position = index)) } }
 }
-@Database(entities = [Document::class, Page::class], version = 1, exportSchema = false)
+@Database(entities = [Document::class, Page::class], version = 2, exportSchema = false)
 abstract class ScannerDatabase : RoomDatabase() { abstract fun dao(): ScannerDao }
 
 class Repository(val context: Context) {
-    private val db = Room.databaseBuilder(context, ScannerDatabase::class.java, "scanner.db").build()
+    init { ScanModels.configure(context.applicationContext) }
+    private val db = Room.databaseBuilder(context, ScannerDatabase::class.java, "scanner.db").addMigrations(object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE Page ADD COLUMN brightness REAL NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE Page ADD COLUMN threshold REAL NOT NULL DEFAULT 12")
+        }
+    }).build()
     val dao = db.dao()
     private val originals = File(context.filesDir, "originals").apply { mkdirs() }
     fun file(page: Page) = File(originals, page.original)
@@ -49,7 +58,9 @@ class Repository(val context: Context) {
             }
             ImageProcessor.decode(temp, 128).recycle() // Reject corrupt/unsupported content before committing.
             check(temp.renameTo(target)) { "Could not save image" }
-            val page = Page(documentId = document.id, original = target.name, position = position)
+            val preview = ImageProcessor.decode(target, 640)
+            val crop = try { DocumentDetector.detect(preview) ?: Crop.Full } finally { preview.recycle() }
+            val page = Page(documentId = document.id, original = target.name, position = position, crop = crop.encode())
             dao.insert(page); page
         } catch (error: Exception) { temp.delete(); target.delete(); throw error }
     }
