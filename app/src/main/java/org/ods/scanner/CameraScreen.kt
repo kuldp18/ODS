@@ -1,9 +1,10 @@
-﻿package org.ods.scanner
+package org.ods.scanner
 
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.os.SystemClock
 import androidx.camera.core.*
+import androidx.activity.compose.BackHandler
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Canvas
@@ -20,14 +21,16 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import java.util.concurrent.Executors
-import kotlin.math.min
+import kotlin.math.max
+import androidx.compose.ui.Alignment
 
 @Composable fun CameraScreen(vm: ScannerViewModel) {
     val context = LocalContext.current; val owner = LocalLifecycleOwner.current
-    val preview = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FIT_CENTER } }
+    val preview = remember { PreviewView(context).apply { scaleType = PreviewView.ScaleType.FILL_CENTER } }
     val capture = remember { ImageCapture.Builder().setTargetAspectRatio(AspectRatio.RATIO_4_3).setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY).build() }
     var provider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
     var taking by remember { mutableStateOf(false) }
+    BackHandler(taking) { /* Finish writing the captured photo before leaving. */ }
     var flash by remember { mutableStateOf(false) }
     var auto by remember { mutableStateOf(false) }
     val currentAuto by rememberUpdatedState(auto)
@@ -106,25 +109,29 @@ import kotlin.math.min
         }, main)
         onDispose { disposed = true; analysis.clearAnalyzer(); provider?.unbindAll(); executor.shutdown() }
     }
-    Column(Modifier.fillMaxSize().background(Color(0xFF101315)).padding(24.dp)) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            TextButton(enabled = !taking, onClick = { vm.screen = if (count > 0) "document" else "library" }) { Text("Back", color = Color(0xFFD4F77D)) }
-            TextButton(onClick = { flash = !flash; capture.flashMode = if (flash) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF }) { Text(if (flash) "Flash on" else "Flash off", color = Color(0xFFD4F77D)) }
-        }
-        Box(Modifier.weight(1f).fillMaxWidth()) {
-            AndroidView(factory = { preview }, modifier = Modifier.fillMaxSize())
-            Canvas(Modifier.fillMaxSize()) {
-                detected?.let { crop ->
-                    val w = min(size.width, size.height*frameRatio); val h = w/frameRatio
-                    val x = (size.width-w)/2; val y = (size.height-h)/2
-                    val points = crop.points.map { Offset(x+it.x*w,y+it.y*h) }
-                    points.indices.forEach { drawLine(Color(0xFFD4F77D),points[it],points[(it+1)%4],2.dp.toPx()) }
-                }
+    Box(Modifier.fillMaxSize().background(Color.Black)) {
+        AndroidView(factory = { preview }, modifier = Modifier.fillMaxSize())
+        Canvas(Modifier.fillMaxSize()) {
+            detected?.let { crop ->
+                val scale = max(size.width/frameRatio,size.height)
+                val w = scale*frameRatio; val h = scale
+                val x = (size.width-w)/2; val y = (size.height-h)/2
+                val points = crop.points.map { Offset(x+it.x*w,y+it.y*h) }
+                points.indices.forEach { drawLine(Color(0xFFD4F77D),points[it],points[(it+1)%4],2.dp.toPx()) }
             }
         }
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) { Switch(auto, { auto = it }, enabled = !taking); Text(if (auto) "Auto capture • Hold steady" else "Manual capture", color = Color.White) }
-        Text(if (detected != null) "Page detected" else "Keep the whole page in view", Modifier.padding(vertical = 8.dp), color = Color.White)
-        Button(enabled = !taking && !vm.busy, onClick = { shutter() }, modifier = Modifier.fillMaxWidth().heightIn(min = 60.dp)) { Text(if (taking) "Saving page…" else "Capture page") }
-        Text("Capture one page, then review it", color = Color(0xFFA8B1AD), modifier = Modifier.padding(top = 12.dp))
+        Row(Modifier.align(Alignment.TopCenter).fillMaxWidth().background(Color.Black.copy(alpha = .45f)).statusBarsPadding().padding(horizontal = 8.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+            TextButton(enabled = !taking, onClick = { vm.screen = if (count > 0) "document" else "library" }) { Text("Back", color = Color.White) }
+            Text("Scan a page", color = Color.White, style = MaterialTheme.typography.titleMedium)
+            TextButton(enabled = !taking, onClick = { flash = !flash; capture.flashMode = if (flash) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF }) { Text(if (flash) "Flash on" else "Flash off", color = Color.White) }
+        }
+        Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.Black.copy(alpha = .75f)).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(if (taking) "Saving page?" else if (detected != null && auto) "Hold steady" else if (detected != null) "Page detected" else "Fit the page inside the camera", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(verticalAlignment = Alignment.CenterVertically) { Switch(auto, { auto = it }, enabled = !taking); Text("Auto", color = Color.White, modifier = Modifier.padding(start = 8.dp)) }
+                Text("${count+1} / new page", color = Color(0xFFA8B1AD), style = MaterialTheme.typography.labelSmall)
+            }
+            Button(enabled = !taking && !vm.busy, onClick = { shutter() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (taking) "Saving?" else "Capture page") }
+        }
     }
 }

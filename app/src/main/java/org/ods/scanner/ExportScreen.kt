@@ -21,6 +21,7 @@ import kotlinx.coroutines.withContext
     var merge by remember { mutableStateOf(false) }
     var paper by remember { mutableStateOf(PaperSize.Auto) }
     var archive by remember { mutableStateOf(Format.PDF) }
+    var advanced by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf(documents.singleOrNull()?.document?.title ?: "Documents") }
     val context = LocalContext.current
     val saveSingle = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument(format.mime)) { uri ->
@@ -42,9 +43,14 @@ import kotlinx.coroutines.withContext
             }
         }
     }
-    Column(Modifier.fillMaxSize().padding(24.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        TextButton(onClick = onBack) { Text("Back") }
-        Text("Share documents", style = MaterialTheme.typography.headlineLarge)
+    fun generate(onReady: () -> Unit) { vm.export(documents, format, quality, name, merge, paper, archive, onReady) }
+    fun saveFiles() { if (vm.exports.size == 1) saveSingle.launch(vm.exports.single().name) else save.launch(null) }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("Back") }
+            Text("Share document", style = MaterialTheme.typography.titleLarge)
+        }
+        Column(Modifier.weight(1f).padding(horizontal = 16.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("${documents.size} documents • ${documents.sumOf { it.pages.size }} pages")
         Text("Format")
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) { Format.entries.forEach { value -> FilterChip(selected = format == value, enabled = !vm.busy, onClick = { format = value; vm.exports = emptyList() }, label = { Text(value.name) }) } }
@@ -58,18 +64,19 @@ import kotlinx.coroutines.withContext
         OutlinedTextField(value = name, onValueChange = { name = it; vm.exports = emptyList() }, label = { Text("Filename") }, enabled = !vm.busy, singleLine = true, modifier = Modifier.fillMaxWidth())
         Text("Quality")
         Row { Quality.entries.forEach { value -> FilterChip(selected = quality == value, enabled = !vm.busy, onClick = { quality = value; vm.exports = emptyList() }, label = { Text(value.name) }) } }
-        if (format == Format.PDF || (format == Format.ZIP && archive == Format.PDF)) {
+        TextButton(onClick = { advanced = !advanced }) { Text(if (advanced) "Hide advanced options" else "Advanced options") }
+        if (advanced && (format == Format.PDF || (format == Format.ZIP && archive == Format.PDF))) {
             Text("Page size")
             Row { PaperSize.entries.forEach { value -> FilterChip(selected = paper == value, enabled = !vm.busy, onClick = { paper = value; vm.exports = emptyList() }, label = { Text(value.name) }) } }
         }
-        if (vm.exports.isEmpty()) {
-            Button(enabled = !vm.busy && documents.any { it.pages.isNotEmpty() }, modifier = Modifier.fillMaxWidth(), onClick = { vm.export(documents, format, quality, name, merge, paper, archive) }) { Text("Generate export") }
-            Text("Final file size appears after generation.")
-        } else {
+        if (vm.exports.isNotEmpty()) {
             Text("${vm.exports.size} files • ${"%.2f".format(vm.exports.sumOf { it.length() } / 1048576.0)} MB")
-            Button(enabled = !vm.busy, modifier = Modifier.fillMaxWidth(), onClick = { runCatching { Exporter(vm.repository).share(vm.exports, format) }.onFailure { vm.error = it.message } }) { Text("Continue to share") }
-            OutlinedButton(enabled = !vm.busy, modifier = Modifier.fillMaxWidth(), onClick = { if (vm.exports.size == 1) saveSingle.launch(vm.exports.single().name) else save.launch(null) }) { Text("Save to device") }
-            Text("If a receiving app cannot accept several files, use a merged PDF or ZIP.")
+        }
+        }
+        Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            if (vm.busy) TextButton(onClick = vm::cancel) { Text("Cancel") }
+            OutlinedButton(enabled = !vm.busy && documents.any { it.pages.isNotEmpty() }, onClick = { generate { saveFiles() } }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) { Text("Save to device") }
+            Button(enabled = !vm.busy && documents.any { it.pages.isNotEmpty() }, onClick = { generate { Exporter(vm.repository).share(vm.exports, format) } }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (vm.busy) "Preparing…" else "Share") }
         }
     }
 }

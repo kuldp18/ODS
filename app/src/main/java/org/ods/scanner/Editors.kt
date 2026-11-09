@@ -1,4 +1,4 @@
-﻿package org.ods.scanner
+package org.ods.scanner
 
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -39,36 +39,42 @@ import kotlin.math.hypot
     var recipe by remember(page.id) { mutableStateOf(page) }
     var all by remember { mutableStateOf(false) }
     var compare by remember { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row { TextButton(onClick = onBack) { Text("Back") }; Text("Enhance", style = MaterialTheme.typography.headlineMedium) }
-        PageImage(vm, if (compare) recipe.copy(filter = Filter.Original.name, contrast = 1f, brightness = 0f) else recipe, Modifier.weight(1f).fillMaxWidth())
-        TextButton(onClick = { compare = !compare }) { Text(if (compare) "Show edited" else "Compare original") }
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    var adjustment by remember { mutableStateOf("Contrast") }
+    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onBack) { Text("Back") }
+            Text("Enhance", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
+            TextButton(onClick = { recipe = page }) { Text("Reset") }
+        }
+        PageImage(vm, if (compare) recipe.copy(filter = Filter.Original.name, contrast = 1f, brightness = 0f) else recipe, Modifier.weight(1f).fillMaxWidth().padding(horizontal = 4.dp))
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { compare = !compare }) { Text(if (compare) "Show edited" else "Compare original") }
+            Spacer(Modifier.weight(1f))
+            if (pages.size > 1) { Checkbox(all, { all = it }); Text("All pages", style = MaterialTheme.typography.bodySmall) }
+        }
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Filter.entries.forEach { filter ->
-                Column(Modifier.width(72.dp).clickable { recipe = recipe.copy(filter = filter.name) }.border(if (recipe.filter == filter.name) 2.dp else 0.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.small).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    PageImage(vm, recipe.copy(filter = filter.name), Modifier.height(78.dp).fillMaxWidth(), maxEdge = 160)
+                Column(Modifier.width(60.dp).clickable { recipe = recipe.copy(filter = filter.name) }.border(if (recipe.filter == filter.name) 2.dp else 0.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.small).padding(4.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    PageImage(vm, recipe.copy(filter = filter.name), Modifier.height(52.dp).fillMaxWidth(), maxEdge = 120)
                     Text(when(filter) { Filter.BW -> "B&W"; Filter.LowLight -> "Low light"; else -> filter.name }, style = MaterialTheme.typography.labelSmall)
                 }
             }
         }
-        Text("Contrast ${"%.2f".format(recipe.contrast)}")
-        Slider(value = recipe.contrast, onValueChange = { recipe = recipe.copy(contrast = it) }, valueRange = .5f..1.5f)
-        var adjustments by remember { mutableStateOf(false) }
-        TextButton(onClick = { adjustments = !adjustments }) { Text(if (adjustments) "Hide adjustments" else "More adjustments") }
-        if (adjustments) Column(Modifier.heightIn(max = 160.dp).verticalScroll(rememberScrollState())) {
-            Text("Brightness ${recipe.brightness.toInt()}")
-            Slider(value = recipe.brightness, onValueChange = { recipe = recipe.copy(brightness = it) }, valueRange = -64f..64f)
-            if (recipe.filter == Filter.BW.name) {
-                Text("B&W threshold ${recipe.threshold.toInt()}")
-                Slider(value = recipe.threshold, onValueChange = { recipe = recipe.copy(threshold = it) }, valueRange = -10f..30f)
+        Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            (listOf("Contrast", "Brightness") + if (recipe.filter == Filter.BW.name) listOf("Threshold") else emptyList()).forEach { value ->
+                FilterChip(selected = adjustment == value, onClick = { adjustment = value }, label = { Text(value) })
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically) { Checkbox(all, { all = it }); Text("Apply filter to all ${pages.size} pages") }
-        TextButton(onClick = { recipe = page.copy(filter = Filter.Original.name, contrast = 1f, brightness = 0f, threshold = 12f) }) { Text("Reset adjustments") }
-        Button(enabled = !vm.busy, modifier = Modifier.fillMaxWidth(), onClick = {
-            vm.work { if (all) pages.forEach { vm.repository.dao.update(it.copy(filter = recipe.filter, contrast = recipe.contrast, brightness = recipe.brightness, threshold = recipe.threshold)) } else vm.repository.dao.update(recipe) }
-            onBack()
-        }) { Text("Apply") }
+        val mode = if (adjustment == "Threshold" && recipe.filter != Filter.BW.name) "Contrast" else adjustment
+        Slider(modifier = Modifier.padding(horizontal = 16.dp), value = when(mode) { "Brightness" -> recipe.brightness; "Threshold" -> recipe.threshold; else -> recipe.contrast },
+            valueRange = when(mode) { "Brightness" -> -64f..64f; "Threshold" -> -10f..30f; else -> .5f..1.5f },
+            onValueChange = { recipe = when(mode) { "Brightness" -> recipe.copy(brightness = it); "Threshold" -> recipe.copy(threshold = it); else -> recipe.copy(contrast = it) } })
+        Button(enabled = !vm.busy, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp).heightIn(min = 52.dp), onClick = {
+            vm.work {
+                if (all) pages.forEach { vm.repository.dao.update(it.copy(filter = recipe.filter, contrast = recipe.contrast, brightness = recipe.brightness, threshold = recipe.threshold)) }
+                else vm.repository.dao.update(recipe)
+                onBack()
+            }
+        }) { Text(if (all && pages.size > 1) "Apply to all ${pages.size} pages" else "Apply changes") }
     }
 }
-

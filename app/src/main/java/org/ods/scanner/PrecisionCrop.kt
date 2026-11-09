@@ -44,18 +44,18 @@ private data class CropEdit(val crop: Crop, val rotation: Int, val straighten: F
         try { bitmap = withContext(Dispatchers.IO) { ImageProcessor.decode(vm.repository.file(page), 1600) } }
         catch (e: CancellationException) { throw e } catch (e: Exception) { vm.error = e.message }
     }
-    Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) { Text("Back") }
             Text("Adjust crop", Modifier.weight(1f), style = MaterialTheme.typography.titleLarge)
             TextButton(onClick = { checkpoint(); restore(CropEdit(Crop.decode(page.crop),page.rotation,page.straighten)); zoom = 1f; pan = Offset.Zero }) { Text("Reset") }
         }
-        Box(Modifier.weight(1f).fillMaxWidth().clip(MaterialTheme.shapes.medium).background(Color(0xFF101315)), contentAlignment = Alignment.Center) {
+        Box(Modifier.weight(1f).fillMaxWidth().background(Color(0xFF101315)), contentAlignment = Alignment.Center) {
             bitmap?.let { image ->
                 BoxWithConstraints(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     val ratio = image.width.toFloat() / image.height
                     val rotated = rotation % 180 != 0
-                    val width = minOf(((if (rotated) maxHeight else maxWidth) - 24.dp).coerceAtLeast(1.dp), (((if (rotated) maxWidth else maxHeight) - 24.dp) * ratio).coerceAtLeast(1.dp))
+                    val width = minOf(((if (rotated) maxHeight else maxWidth) - 8.dp).coerceAtLeast(1.dp), (((if (rotated) maxWidth else maxHeight) - 8.dp) * ratio).coerceAtLeast(1.dp))
                     Box(Modifier.width(width).aspectRatio(ratio).graphicsLayer { rotationZ = rotation.toFloat() - straighten; scaleX = zoom; scaleY = zoom; translationX = pan.x; translationY = pan.y }) {
                         Image(image.asImageBitmap(), "Original page", Modifier.fillMaxSize())
                         Canvas(Modifier.fillMaxSize().pointerInput(image, zoomMode) {
@@ -92,7 +92,7 @@ private data class CropEdit(val crop: Crop, val rotation: Int, val straighten: F
                         }
                     }
                 }
-                if (dragging || !zoomMode) Canvas(Modifier.align(Alignment.TopEnd).padding(12.dp).size(96.dp).clip(CircleShape).border(2.dp, Color(0xFFD4F77D), CircleShape)) {
+                if (dragging || !zoomMode) Canvas(Modifier.align(Alignment.TopEnd).padding(8.dp).size(80.dp).clip(CircleShape).border(2.dp, Color(0xFFD4F77D), CircleShape)) {
                     val handle = crop.handles()[selected]; val side = min(image.width, image.height).coerceAtMost(160)
                     val x = (handle.x * image.width - side / 2).toInt().coerceIn(0, image.width - side)
                     val y = (handle.y * image.height - side / 2).toInt().coerceIn(0, image.height - side)
@@ -103,7 +103,7 @@ private data class CropEdit(val crop: Crop, val rotation: Int, val straighten: F
                 }
             } ?: CircularProgressIndicator()
         }
-        Text(hint, style = MaterialTheme.typography.bodySmall)
+        if (detecting || hint != "Drag corners or edge midpoints to fit the page") Text(hint, style = MaterialTheme.typography.bodySmall)
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             OutlinedButton(enabled = bitmap != null && !detecting, onClick = { scope.launch {
                 detecting = true

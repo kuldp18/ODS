@@ -27,6 +27,7 @@ data class DocumentPages(@Embedded val document: Document, @Relation(parentColum
     @Insert suspend fun insert(document: Document)
     @Insert suspend fun insert(page: Page)
     @Query("SELECT * FROM Document WHERE id = :id LIMIT 1") suspend fun document(id: String): Document?
+    @Query("SELECT * FROM Page WHERE id = :id LIMIT 1") suspend fun page(id: String): Page?
     @Query("SELECT COALESCE(MAX(position), -1) + 1 FROM Page WHERE documentId = :id") suspend fun nextPosition(id: String): Int
     @Update suspend fun update(page: Page)
     @Update suspend fun update(document: Document)

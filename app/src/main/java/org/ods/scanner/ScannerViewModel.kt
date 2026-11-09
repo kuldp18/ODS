@@ -16,7 +16,9 @@ class ScannerViewModel(application: Application, private val savedState: SavedSt
     val documents = repository.dao.observe().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     var activeId by mutableStateOf<String?>(savedState["documentId"])
         private set
-    fun openDocument(id: String?) { activeId = id; savedState["documentId"] = id }
+    fun openDocument(id: String?) { activeId = id; savedState["documentId"] = id; retakeId = null }
+    private var retakeId: String? = null
+    fun prepareCapture(pageId: String? = null) { retakeId = pageId }
     var screen by mutableStateOf("library")
     var reviewPageId by mutableStateOf<String?>(null)
         private set
@@ -58,8 +60,10 @@ class ScannerViewModel(application: Application, private val savedState: SavedSt
     fun captured(file: File) = work {
         val document = destination()
         val position = repository.dao.nextPosition(document.id)
-        val page = Page(documentId = document.id, original = file.name, position = position)
-        repository.dao.insert(page)
+        val replaced = retakeId?.let { repository.dao.page(it) }?.takeIf { it.documentId == document.id }
+        val page = Page(id = replaced?.id ?: java.util.UUID.randomUUID().toString(), documentId = document.id, original = file.name, position = replaced?.position ?: position)
+        if (replaced == null) repository.dao.insert(page) else repository.dao.update(page)
+        retakeId = null
         reviewPageId = page.id
         screen = "document"
         val crop = withContext(Dispatchers.Default) {
