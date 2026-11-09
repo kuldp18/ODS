@@ -1,8 +1,16 @@
-﻿# ODS — Open Document Scanner
+# ODS — Open Document Scanner
 
 An offline document scanner for Android 8.0 and later. Scan or import pages,
 adjust crops and filters, and save or share documents. No accounts, ads,
 watermarks, or internet permission.
+
+## Scan workflow
+
+Open **Scan document**, then capture a page manually or enable Auto. Each capture
+stops the camera and immediately opens the saved page for review. Crop or enhance
+it, use **Retake** to replace it, or **Scan another page** to add to the document.
+**Share document** opens export options; **Share** prepares the file and opens the
+Android Sharesheet directly. **Save to device** opens the system destination picker.
 
 ## Features
 

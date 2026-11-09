@@ -37,23 +37,25 @@ import androidx.compose.ui.Alignment
     var detected by remember { mutableStateOf<Crop?>(null) }
     var frameRatio by remember { mutableFloatStateOf(3f/4f) }
     val gate = remember { AutoCaptureGate() }
+    val captureLatch = remember { CaptureLatch() }
     val main = remember { ContextCompat.getMainExecutor(context) }
     val docs by vm.documents.collectAsState()
     val count = docs.firstOrNull { it.document.id == vm.activeId }?.pages?.size ?: 0
     fun shutter() {
         if (taking || vm.busy) return
+        if (!captureLatch.begin()) return
         taking = true
         auto = false
         val file = vm.repository.captureFile()
         capture.targetRotation = preview.display?.rotation ?: 0
-        capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), main, object : ImageCapture.OnImageSavedCallback {
+        try { capture.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), main, object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(result: ImageCapture.OutputFileResults) {
                 provider?.unbindAll()
                 vm.screen = "document"
                 vm.captured(file)
             }
-            override fun onError(exception: ImageCaptureException) { taking = false; file.delete(); vm.error = exception.message }
-        })
+            override fun onError(exception: ImageCaptureException) { captureLatch.failed(); taking = false; file.delete(); vm.error = exception.message }
+        }) } catch (e: Exception) { captureLatch.failed(); taking = false; file.delete(); vm.error = e.message }
     }
     val currentShutter by rememberUpdatedState({ shutter() })
     DisposableEffect(owner) {
@@ -126,12 +128,12 @@ import androidx.compose.ui.Alignment
             TextButton(enabled = !taking, onClick = { flash = !flash; capture.flashMode = if (flash) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF }) { Text(if (flash) "Flash on" else "Flash off", color = Color.White) }
         }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().background(Color.Black.copy(alpha = .75f)).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(if (taking) "Saving page?" else if (detected != null && auto) "Hold steady" else if (detected != null) "Page detected" else "Fit the page inside the camera", color = Color.White, style = MaterialTheme.typography.bodyMedium)
+            Text(if (taking) "Saving page..." else if (detected != null && auto) "Hold steady" else if (detected != null) "Page detected" else "Fit the page inside the camera", color = Color.White, style = MaterialTheme.typography.bodyMedium)
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                 Row(verticalAlignment = Alignment.CenterVertically) { Switch(auto, { auto = it }, enabled = !taking); Text("Auto", color = Color.White, modifier = Modifier.padding(start = 8.dp)) }
                 Text("${count+1} / new page", color = Color(0xFFA8B1AD), style = MaterialTheme.typography.labelSmall)
             }
-            Button(enabled = !taking && !vm.busy, onClick = { shutter() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (taking) "Saving?" else "Capture page") }
+            Button(enabled = !taking && !vm.busy, onClick = { shutter() }, modifier = Modifier.fillMaxWidth().heightIn(min = 52.dp)) { Text(if (taking) "Saving..." else "Capture page") }
         }
     }
 }

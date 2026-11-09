@@ -43,7 +43,10 @@ import kotlinx.coroutines.withContext
             }
         }
     }
-    fun generate(onReady: () -> Unit) { vm.export(documents, format, quality, name, merge, paper, archive, onReady) }
+    fun generate(onReady: () -> Unit) {
+        if (vm.exports.isNotEmpty()) runCatching(onReady).onFailure { vm.error = it.message }
+        else vm.export(documents, format, quality, name, merge, paper, archive, onReady)
+    }
     fun saveFiles() { if (vm.exports.size == 1) saveSingle.launch(vm.exports.single().name) else save.launch(null) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {

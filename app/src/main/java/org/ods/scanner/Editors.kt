@@ -17,7 +17,7 @@ import android.graphics.Bitmap
 import kotlin.math.hypot
 
 @Composable fun PageImage(vm: ScannerViewModel, page: Page, modifier: Modifier = Modifier, maxEdge: Int = 1200) {
-    var bitmap by remember(page.id) { mutableStateOf<Bitmap?>(null) }
+    var bitmap by remember(page.id, page.original) { mutableStateOf<Bitmap?>(null) }
     var failure by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(page, maxEdge) {
         delay(120)

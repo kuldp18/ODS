@@ -1,4 +1,4 @@
-﻿# Development status
+# Development status
 
 ## Current upgrade
 
@@ -16,6 +16,19 @@
   single-file or multi-file system saving. No fixed page-count limit.
 - Persistence: non-destructive Room migrations 1→2→3; page metadata is saved before
   corner inference so canceling detection does not remove the saved capture.
+
+## Review-first workflow update
+
+- A camera visit can capture one page; queued auto-capture events cannot repeat it.
+- Successful capture stops the camera and opens the new page immediately.
+- Review offers Crop, Enhance, Rotate, Pages, Scan another page, Retake, and Share.
+- Retake replaces the selected page in place; it does not append a duplicate.
+- The camera fills the screen with overlay controls. Review and editor previews
+  use most of the available space; outer padding and repeated headers are reduced.
+- Share prepares files and opens the native Sharesheet in one action. Saving uses
+  the system picker directly. Export back navigation returns to its entry screen.
+- Eleven JVM tests passed, including single-shot retry and concurrent shutter
+  regression tests. Visual layouts and Android runtime behavior still need testing.
 
 ## Validation completed locally
 
