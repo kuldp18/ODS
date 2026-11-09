@@ -55,8 +55,8 @@ object ImageProcessor {
         val source = Mat(); val warped = Mat(); val rgb = Mat(); val adjusted = Mat()
         val corners = Crop.decode(page.crop).points.map { Point((it.x * (bitmap.width - 1)).toDouble(), (it.y * (bitmap.height - 1)).toDouble()) }
         fun distance(a: Point, b: Point) = hypot(a.x - b.x, a.y - b.y)
-        val w = max(2, max(distance(corners[0], corners[1]), distance(corners[3], corners[2])).roundToInt())
-        val h = max(2, max(distance(corners[0], corners[3]), distance(corners[1], corners[2])).roundToInt())
+        val w = max(2, max(distance(corners[0], corners[1]), distance(corners[3], corners[2])).roundToInt() + 1)
+        val h = max(2, max(distance(corners[0], corners[3]), distance(corners[1], corners[2])).roundToInt() + 1)
         val src = MatOfPoint2f(*corners.toTypedArray()); val dst = MatOfPoint2f(Point(0.0, 0.0), Point(w - 1.0, 0.0), Point(w - 1.0, h - 1.0), Point(0.0, h - 1.0))
         var transform: Mat? = null
         try {

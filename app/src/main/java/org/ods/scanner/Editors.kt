@@ -24,6 +24,8 @@ import kotlin.math.hypot
         failure = null
         try { bitmap = withContext(Dispatchers.Default) { PreviewCache.get(vm.repository, page, maxEdge) } }
         catch (e: CancellationException) { throw e }
+        catch (e: OutOfMemoryError) { failure = "Not enough memory for a preview. Close and reopen this document." }
+        catch (e: LinkageError) { failure = "This device cannot load the image processing engine." }
         catch (e: Exception) { failure = e.message }
     }
     Box(modifier, contentAlignment = Alignment.Center) {
